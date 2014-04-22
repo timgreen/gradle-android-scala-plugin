@@ -68,7 +68,7 @@ public class AndroidScalaPlugin implements Plugin<Project> {
         def classLoader = androidExtension.class.classLoader
         dexClass = classLoader.loadClass("com.android.build.gradle.tasks.Dex")
         testVariantDataClass = classLoader.loadClass("com.android.build.gradle.internal.variant.TestVariantData")
-        libraryVariantClass =  classLoader.loadClass("com.android.build.gradle.api.LibraryVariant")
+        libraryVariantClass = classLoader.loadClass("com.android.build.gradle.api.LibraryVariant")
         jarDependencyClass = classLoader.loadClass("com.android.builder.dependency.JarDependency")
         updateAndroidExtension()
         updateAndroidSourceSetsExtension()
@@ -127,7 +127,9 @@ public class AndroidScalaPlugin implements Plugin<Project> {
             return
         }
         def jars = testVariant.variantData.variantConfiguration.jars
+        println "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
         testedVariant.variantData.variantConfiguration.compileClasspath.findAll {
+            println it
             it.name.endsWith(".jar")
         }.each { file ->
             def jarDependencyConstructor = jarDependencyClass.getConstructor(File.class, boolean.class, boolean.class)
@@ -223,7 +225,7 @@ public class AndroidScalaPlugin implements Plugin<Project> {
      *
      * @return the proguard configuration text
      */
-    String getProGuardConfig() {
+    String getDefaultProGuardConfig() {
         '''
         -ignorewarnings
 
@@ -301,16 +303,19 @@ public class AndroidScalaPlugin implements Plugin<Project> {
      * @param task the Dex task
      */
     void proguardBeforeDexTestTask(Task task) {
+        if (!extension.runAndroidTestProguard) {
+            return
+        }
         if (!dexClass.isInstance(task)) {
             return
         }
-        def variant = task.variant
-        if (!testVariantDataClass.isInstance(variant)) {
+        def variantData = task.variant
+        if (!testVariantDataClass.isInstance(variantData)) {
             return
         }
 
         project.logger.info("Dex task for TestVariant detected")
-        def variantWorkDir = new File([workDir, "variant", variant.name].join(File.separator))
+        def variantWorkDir = new File([workDir, "variant", variantData.name].join(File.separator))
         FileUtils.forceMkdir(variantWorkDir)
         def inputs = task.inputFiles + task.libraries
         def outputFile = new File(variantWorkDir, "proguarded-classes.jar")
@@ -320,13 +325,25 @@ public class AndroidScalaPlugin implements Plugin<Project> {
         def ant = new AntBuilder()
         ant.taskdef(name: 'proguard', classname: 'proguard.ant.ProGuardTask', // TODO: use properties
                 classpath: project.configurations.androidScalaPluginProGuard.asPath)
-        def proguardConfigFile = new File(variantWorkDir, "proguard-config.txt")
-        proguardConfigFile.withWriter { it.write getProGuardConfig() }
-        ant.proguard(configuration: proguardConfigFile) {
+        def proguardFile = extension.androidTestProguardFile
+        if (!proguardFile) {
+            proguardFile = new File(variantWorkDir, "proguard-config.txt")
+            proguardFile.withWriter {
+                it.write """
+                ${defaultProGuardConfig}
+                -keep class ${variantData.variantConfiguration.packageName}.** { *; }
+              """
+                String testedPackageName = variantData.variantConfiguration.testedPackageName
+                if (testedPackageName) {
+                    it.write("-keep class ${testedPackageName}.** { *; }\n")
+                }
+            }
+        }
+        ant.proguard(configuration: proguardFile) {
             inputs.each {
                 injar(file: it)
             }
-            variant.javaCompileTask.options.bootClasspath.split(File.pathSeparator).each {
+            variantData.javaCompileTask.options.bootClasspath.split(File.pathSeparator).each {
                 libraryJar(file: new File(it))
             }
             outjar(file: outputFile)

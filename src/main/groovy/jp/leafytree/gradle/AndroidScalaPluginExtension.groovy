@@ -22,6 +22,12 @@ class AndroidScalaPluginExtension {
     /** scalac target option */
     public String target = "jvm-1.6"
 
+    /** */
+    public boolean runAndroidTestProguard = true
+
+    /** */
+    public File androidTestProguardFile
+
     /**
      * Sets scalac target option.
      *
@@ -29,5 +35,21 @@ class AndroidScalaPluginExtension {
      */
     public void target(String target) {
         this.target = target
+    }
+
+    /**
+     *
+     * @param runAndroidTestProguard
+     */
+    public void runAndroidTestProguard(boolean runAndroidTestProguard) {
+        this.runAndroidTestProguard = runAndroidTestProguard
+    }
+
+    /**
+     *
+     * @param androidTestProguardFile
+     */
+    public void androidTestProguardFile(File androidTestProguardFile) {
+        this.androidTestProguardFile = androidTestProguardFile
     }
 }
